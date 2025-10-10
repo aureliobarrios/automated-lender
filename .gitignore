@@ -1,3 +1,5 @@
 lenderVENV/
 training.ipynb
 data/
+models/
+.env

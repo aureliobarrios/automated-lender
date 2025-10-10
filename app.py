@@ -1,7 +1,102 @@
+import os
+import pickle
+import json
 import gradio as gr
+import pandas as pd
+from dotenv import load_dotenv
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.prebuilt import create_react_agent
+
+from langchain.chat_models import init_chat_model
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langchain_core.tools import tool
+from langchain_community.tools.tavily_search import TavilySearchResults
+
+load_dotenv()
+
+OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+TAVILY_API_KEY = os.environ["TAVILY_API_KEY"]
 
 with gr.Blocks() as demo:
+    # ----- Agentic Functions -----
+    @tool
+    def loan_application(dependents: int, income: int, loan_amount: int, loan_term: int, credit_score: int, graduate: bool, self_employed: bool) -> str:
+        "Function that takes in feature inputs about and individual to input to a trained Machine Learning model. The Machine Learning model then predicts if the user will or will not be accepted for the loan application."
+
+        #load in machine learning model
+        classifier = pickle.load(open("models/clf1.pkl", "rb"))
+        #load in standard scaler
+        scaler = pickle.load(open("models/clf1_scaler.pkl", "rb"))
+
+        #build a new data entry
+        entry = pd.DataFrame(
+            [[dependents, income, loan_amount, loan_term, credit_score, graduate, self_employed]], 
+            columns=['no_of_dependents', 'income_annum', 'loan_amount', 'loan_term', 'cibil_score', 'education_ Graduate', 'self_employed']
+        )
+        #scale the new entry
+        entry = scaler.transform(entry)
+        #make a prediction based on the input
+        result = classifier.predict(entry)
+        #return the result
+        if bool(result[0]):
+            return "You got approved!"
+        return "Unfortunately you did not get approved."
+
+    @tool
+    def search_web(query: str) -> list | None:
+        "Function that allows for searching the web for information"
+
+        try:
+            #search the web using tavily
+            search = TavilySearchResults(max_results=3)
+            #get the results
+            results = search.invoke(query)
+            #return results if they exist
+            if results:
+                return results
+            return None
+        except Exception as e:
+            return None
+        
+    #create our openai model
+    model = init_chat_model(model="gpt-4.1-mini", model_provider="openai")
+    #create the tools for our ReAct agent
+    tools = [loan_application, search_web]
+    #build the ReAct agent
+    agent = create_react_agent(model=model, tools=tools, checkpointer=MemorySaver())
+    #create the config for memory saving
+    config = {"configurable": {"thread_id": "lesson_3_thread"}}
+
+    
     # ----- Helper Functions -----
+    #helper function to create agent output
+    def beautify_output(agent_response):
+        #build response string
+        response_string = ""
+        #loop through message and build a response
+        for message in agent_response["messages"]:
+            #check to see if we have an AI message
+            if type(message) == AIMessage:
+                #check to see if there is content in the AIMessage
+                if message.content:
+                    #build the response string
+                    response_string = message.content + response_string
+            #check to see if we have a tool message
+            elif type(message) == ToolMessage:
+                #check to see what tool we used
+                if message.name == "search_web":
+                    #get the tool call results
+                    web_results = json.loads(message.content)
+                    #update response string
+                    response_string = response_string + "\n\nResources:\n"
+                    #loop through the web results
+                    for curr_result in web_results:
+                        response_string = response_string + curr_result["url"] + "\n"
+                #update message if used ML model
+                elif message.name == "loan_application":
+                    #update response string
+                    response_string = response_string + "\n\nMachine Learning Model Used!"
+        return response_string
 
     # ----- Components -----
     
@@ -51,10 +146,16 @@ with gr.Blocks() as demo:
         return chatbot
     
     #chat with the chatbot
-    def bot(msg, chatbot):
+    def bot(chatbot):
+        #get the content of the user message
+        user_message = chatbot[-1]["content"]
+        #call the agent for a response
+        response = agent.invoke({
+            "messages": [HumanMessage(content=user_message)]
+        }, config)
 
-        chatbot.append({"role": "assistant", "content": "Interacted with chatbot!"})
-
+        #add response to the chatbot interface
+        chatbot.append({"role": "assistant", "content": beautify_output(response)})
         return chatbot
     
     #check input when applying for job
@@ -115,9 +216,9 @@ with gr.Blocks() as demo:
         inputs=[msg, chatbot],
         outputs=chatbot
     ).then(
-        bot, [msg, chatbot], chatbot
-    ).then(
         clear_textbox, msg, msg
+    ).then(
+        bot, chatbot, chatbot
     )
 
 if __name__ == "__main__":
