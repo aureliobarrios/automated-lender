@@ -18,6 +18,8 @@ OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 TAVILY_API_KEY = os.environ["TAVILY_API_KEY"]
 
 with gr.Blocks() as demo:
+    #config environment variable
+    MESSAGE_INDEX = 0
     # ----- Agentic Functions -----
     @tool
     def loan_application(dependents: int, income: int, loan_amount: int, loan_term: int, credit_score: int, graduate: bool, self_employed: bool) -> str:
@@ -71,10 +73,14 @@ with gr.Blocks() as demo:
     # ----- Helper Functions -----
     #helper function to create agent output
     def beautify_output(agent_response):
+        #access global variable
+        global MESSAGE_INDEX
         #build response string
         response_string = ""
         #loop through message and build a response
-        for message in agent_response["messages"]:
+        for message in agent_response["messages"][MESSAGE_INDEX:]:
+            #increment message_index
+            MESSAGE_INDEX += 1
             #check to see if we have an AI message
             if type(message) == AIMessage:
                 #check to see if there is content in the AIMessage
