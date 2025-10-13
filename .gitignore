@@ -1,5 +1,10 @@
-lenderVENV/
-training.ipynb
-data/
-models/
 .env
+
+__pycache__
+
+data/
+lenderVENV/
+models/
+
+xgboost.ipynb
+training.ipynb

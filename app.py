@@ -4,6 +4,8 @@ import json
 import gradio as gr
 import pandas as pd
 from dotenv import load_dotenv
+from models.builder import GetDummies
+from sklearn.base import BaseEstimator, TransformerMixin
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 
@@ -18,31 +20,83 @@ OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 TAVILY_API_KEY = os.environ["TAVILY_API_KEY"]
 
 with gr.Blocks() as demo:
+    
     #config environment variable
     MESSAGE_INDEX = 0
+    
     # ----- Agentic Functions -----
     @tool
-    def loan_application(dependents: int, income: int, loan_amount: int, loan_term: int, credit_score: int, graduate: bool, self_employed: bool) -> str:
+    def loan_application(loan_amount: float, loan_term: float, interest_rate: float, loan_installment:float, annual_income: float, debt_to_income_ratio: float, earliest_credit_line: float, open_credit_accounts: float, derogatory_record: bool, 
+                    revolving_balance: float, revolving_utilization: float, total_accounts: float, mortgage_account: bool, past_bankruptcy: bool, loan_grade: str, owernship_status: str, verification_status: str) -> str:
         "Function that takes in feature inputs about and individual to input to a trained Machine Learning model. The Machine Learning model then predicts if the user will or will not be accepted for the loan application."
 
-        #load in machine learning model
-        classifier = pickle.load(open("models/clf1.pkl", "rb"))
-        #load in standard scaler
-        scaler = pickle.load(open("models/clf1_scaler.pkl", "rb"))
+        #save all numeric features for new entry
+        data_entry_numeric = {
+            "loan_amnt": [loan_amount],
+            "term": loan_term,
+            "int_rate": interest_rate,
+            "installment": loan_installment,
+            "annual_inc": annual_income,
+            "dti": debt_to_income_ratio,
+            "earliest_cr_line": earliest_credit_line,
+            "open_acc": open_credit_accounts,
+            "pub_rec": int(derogatory_record),
+            "revol_bal": revolving_balance,
+            "revol_util": revolving_utilization,
+            "total_acc": total_accounts,
+            "mort_acc": int(mortgage_account),
+            "pub_rec_bankruptcies": int(past_bankruptcy)
+        }
+        #save all the categorical features for the new entry
+        data_entry_categorical = {
+            "sub_grade": [loan_grade],
+            "home_ownership": owernship_status,
+            "verification_status": verification_status
+        }
+        #build dataframe from numeric entries
+        df_numeric_entry = pd.DataFrame(data_entry_numeric)
+        #build dataframe from categorical entries
+        df_categorical_entry = pd.DataFrame(data_entry_categorical)
 
-        #build a new data entry
-        entry = pd.DataFrame(
-            [[dependents, income, loan_amount, loan_term, credit_score, graduate, self_employed]], 
-            columns=['no_of_dependents', 'income_annum', 'loan_amount', 'loan_term', 'cibil_score', 'education_ Graduate', 'self_employed']
-        )
+        #build dummies using loaded dummies builder
+        df_categorical_entry = loaded_builder.transform(df_categorical_entry)
+        #concat the new entry into one
+        X_new = pd.concat([df_numeric_entry, df_categorical_entry], axis=1)
+        #load in the scaler
+        with open("models/xgboost_scaler.pkl", "rb") as f:
+            loaded_scaler = pickle.load(f)
         #scale the new entry
-        entry = scaler.transform(entry)
-        #make a prediction based on the input
-        result = classifier.predict(entry)
-        #return the result
-        if bool(result[0]):
-            return "You got approved!"
-        return "Unfortunately you did not get approved."
+        X_new = loaded_scaler.transform(X_new)
+        #load in the xgboost model
+        with open("models/xgboost_clf.pkl", "rb") as f:
+            loaded_model = pickle.load(f)
+        #predict the current entry
+        prediction = int(loaded_model.predict(X_new)[0])
+        #get the probability of the entry
+        probability = loaded_model.predict_proba(X_new)[0][prediction] * 100
+
+        #identify credit risk of the user
+        if prediction:
+            #identify low risk
+            if probability >= 85:
+                user_risk = "Low Risk"
+            #identify medium risk
+            elif probability >= 70 and probability < 85:
+                user_risk = "Medium Risk"
+            #identify low risk
+            else:
+                user_risk = "High Risk"
+        else:
+            #user got denied therefore default very high risk
+            user_risk = "Very High Risk"
+
+        #return result based on prediction
+        if prediction:
+            #user got approved
+            return f"Status: Approved\nLoan Payoff Probability: {probability:.2f}\nRisk Category: {user_risk}"
+        else:
+            #user did not get approved
+            return f"Status: Denied\nLoan Default Probability: {probability:.2f}\nRisk Category: {user_risk}"
 
     @tool
     def search_web(query: str) -> list | None:
@@ -108,26 +162,59 @@ with gr.Blocks() as demo:
     
     with gr.Row():
         with gr.Column(scale=1):
-            with gr.Row():
-                graduate = gr.Radio(["Yes", "No"], value="Yes", label="Education", info="Are you a college graduate?", interactive=True)
-                
-                self_employed = gr.Radio(["Yes", "No"], value="No", label="Employment", info="Are you self employed?", interactive=True)
+
+            #update numeric features for machine learning model
+
+            loan_amount = gr.Number(label="Loan Amount", minimum=500, maximum=40000.0, value=1000, interactive=True)
+
+            loan_term = gr.Radio(["36 Months", "60 Months"], value="36 Months", label="Users Loan Term", interactive=True)
+
+            interest_rate = gr.Slider(5, 31, step=0.1, value=12.5, label="Loan Interest Rate", interactive=True)
+
+            income = gr.Number(label="Users Annual Income", minimum=4000, maximum=250000.0, value=50000, interactive=True)
+
+            dti = gr.Slider(0, 50, step=0.1, value=12.5, label="Users Debt To Income Ratio", interactive=True)
+
+            earliest_credit_line = gr.Dropdown(list(range(1944, 2014)), value=2000, multiselect=False, label="Users Earliest Credit Line", interactive=True)
             
+            open_accounts = gr.Number(label="Number of Open Accounts", minimum=1, maximum=40, value=1, interactive=True, precision=0)
+
             with gr.Row():
-                dependents = gr.Radio(["0", "1", "2", "3", "4", "5+"], value="0", label="Dependents", info="How many dependents do you have?", interactive=True)
-            
-            credit_score = gr.Slider(300, 850, precision=0, step=1, value=650, label="Credit Score", info="What is your credit score?", interactive=True)
 
-            income = gr.Number(label="Income", info="Your annual income", minimum=0, maximum=10000000, value=50000, interactive=True)
+                pub_rec = gr.Radio(["Yes", "No"], value="No", label="Does The User Have Any Derogatory Public Records?", interactive=True)
 
-            loan_term = gr.Slider(2, 20, precision=0, step=1, value=5, label="Loan Term", info="Loan Length (In Years)", interactive=True)
+                mort_acc = gr.Radio(["Yes", "No"], value="Yes", label="Does The User Have A Mortgage Account?", interactive=True)
 
-            loan_amount = gr.Number(label="Amount", info="The requested loan amount", minimum=100, maximum=40000000, value=5000, interactive=True)
+                bankruptcies = gr.Radio(["Yes", "No"], value="No", label="Does The User Have Any Bankruptcies", interactive=True)
+
+            revol_bal = gr.Number(label="User Total Credit Revolving Balance", minimum=0, maximum=250000, value=1500, interactive=True)
+
+            revol_util = gr.Slider(0, 100, step=0.1, value=20, label="Revolving Utilization Rate", interactive=True)
+
+            total_acc = gr.Number(label="Total Credit Accounts", minimum=1, maximum=80, value=1, interactive=True, precision=0)
+
+            #update categorical features for machine learning model
+
+            #built grade letters
+            letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+            #save a list of possible grades for the loan
+            possible_grades = []
+            #build out the full list
+            for curr_letter in letters:
+                for i in range(1, 6):
+                    #save current iteration of possible grade
+                    possible_grades.append(curr_letter + str(i))
+
+            loan_grade = gr.Dropdown(possible_grades, value="A1", multiselect=False, label="Loan Grade", interactive=True)
+
+            home_ownership = gr.Radio(["Own", "Mortgage", "Rent", "Other"], value="Rent", label="Home Ownership Status", interactive=True)
+
+            verification = gr.Radio(["Verified", "Source Verified", "Not Verified"], value="Verified", label="Verification Status", interactive=True)
 
             with gr.Row():
                 apply_button = gr.Button("Apply", interactive=True)
 
-        with gr.Column(scale=2):
+        with gr.Column(scale=3):
             chatbot = gr.Chatbot(type="messages")
             
             msg = gr.Textbox()
@@ -145,10 +232,67 @@ with gr.Blocks() as demo:
         chatbot.append({"role": "user", "content": msg})
         return chatbot
     
-    def loan_request(chatbot):
-        print("ran loan request")
-        chatbot.append({"role": "user", "content": "Loan Request!"})
-        chatbot.append({"role": "assistant", "content": "Looks like you submitted a loan request!\n\nStarting Up The Loan Request Process!"})
+    #use fills out loan form and clicks apply
+    def loan_request(loan_amount, loan_term, interest_rate, income, dti, earliest_credit_line, open_accounts, pub_rec, mort_acc, bankruptcies, revol_bal, revol_util, total_acc, loan_grade, home_ownership, verification, chatbot):
+        #loan term data conversion
+        term_conversion = {
+            "36 Months": 36.0,
+            "60 Months": 60.0
+        }
+        #conver loan term
+        term_converted = term_conversion[loan_term]
+        #calculate the monthly payment for the loan
+        r = round((interest_rate / 100) / 12, 6)
+        #calculate the top of the formula
+        top = r * ((1 + r) ** term_converted)
+        #calculate the botom of the formula
+        bottom = ((1 + r) ** term_converted) - 1
+        #calculate monthly installment
+        loan_installment = loan_amount * (top / bottom)
+        #build a data dictionary
+        data_dict = {
+            "loan_amount": loan_amount,
+            "loan_term": term_converted,
+            "interest_rate": interest_rate,
+            "loan_installment": loan_installment,
+            "annual_income": income,
+            "debt_to_income_ratio": dti,
+            "earliest_credit_line": earliest_credit_line,
+            "open_credit_accounts": open_accounts,
+            "derogatory_record": pub_rec == "Yes",
+            "revolving_balance": revol_bal,
+            "revolving_utilization": revol_util,
+            "total_accounts": total_acc,
+            "mortgage_account": mort_acc == "Yes",
+            "past_bankruptcy": bankruptcies == "Yes",
+            "loan_grade": loan_grade,
+            "owernship_status": home_ownership.upper(),
+            "verification_status": verification,
+        }
+        #run the data on the pre-trained machine learning model
+        application_result = loan_application.invoke(data_dict)
+        #build the agent message to feed to our ReAct agent
+        agent_message = f"""You are consulting to a loan officer that needs to get more information about a loan applicant. You have the following data dictionary about a user that applied for a loan through our state of the art Machine Learning Model. 
+        
+        Data Dictionary: {data_dict}
+
+        The Machine Learning Model returned the following result.
+
+        Result: {application_result}
+
+        Summarize the findings to the loan officer. Make sure to pull in relevant information from the user stored in the data dictionary. Make sure to follow these requirements:
+        - Summarize the users financial profile (like income, debt, utilization) and how these attributes may have contributed to the result.
+        - Summarize the users historical profile (like earliest credit line, public records) and how these attributes may have contributed to the result.
+        - Finally summarize the users loan request information like (loan amount, loan term) compare this using the interest rate to the users income and debt utilization in and summarize how they affected the result. Make sure to mention the loan installment amount and how that compares to the users financial profile.
+        """
+        #append user message
+        chatbot.append({"role": "user", "content": "Submitted Loan Application Form!"})
+        #call the agent for a response
+        response = agent.invoke({
+            "messages": [HumanMessage(content=agent_message)]
+        }, config)
+        #add response to the chatbot interface
+        chatbot.append({"role": "assistant", "content": beautify_output(response) + "\n\n---- Machine Learning Model Result ----\n" + application_result})
         return chatbot
     
     #chat with the chatbot
@@ -165,17 +309,14 @@ with gr.Blocks() as demo:
         return chatbot
     
     #check input when applying for job
-    def check_input(income, loan_amount, chatbot):
-
-        #check to for missing data
-        if loan_amount is None or income is None:
-            raise gr.Error("Make sure to fill out the entire form!", duration=5)
-
-        new_message = f"Loan Amount: {loan_amount}\nIncome: {income}"
-
-        chatbot.append({"role": "user", "content": new_message})
-
-        return income, loan_amount, chatbot
+    def check_input(loan_amount, income, open_accounts, revol_bal, total_acc, chatbot):
+        #check for missing data
+        if None in [loan_amount, income, open_accounts, revol_bal, total_acc]:
+            raise gr.Error("Make there are no missing values in the form!", duration=5)
+        #add message to chatbot
+        chatbot.append({"role": "user", "content": "Form Submitted"})
+        #return values unchanged
+        return loan_amount, income, open_accounts, revol_bal, total_acc, chatbot
     
     def reset_form(income, loan_amount, chatbot):
         print("ran reset")
@@ -199,14 +340,14 @@ with gr.Blocks() as demo:
 
     # #handle user clicks apply success
     apply_button.click(
-        check_input, [income, loan_amount, chatbot], [income, loan_amount, chatbot]
+        check_input, [loan_amount, income, open_accounts, revol_bal, total_acc, chatbot], [loan_amount, income, open_accounts, revol_bal, total_acc, chatbot]
     ).success(
-        loan_request, chatbot, chatbot
+        loan_request, [loan_amount, loan_term, interest_rate, income, dti, earliest_credit_line, open_accounts, pub_rec, mort_acc, bankruptcies, revol_bal, revol_util, total_acc, loan_grade, home_ownership, verification, chatbot], chatbot
     )
 
     #handle user clicks apply failure
     apply_button.click(
-        check_input, [income, loan_amount, chatbot], [income, loan_amount, chatbot]
+        check_input, [loan_amount, income, open_accounts, revol_bal, total_acc, chatbot], [loan_amount, income, open_accounts, revol_bal, total_acc, chatbot]
     ).failure(
         reset_form, [income, loan_amount, chatbot], [income, loan_amount, chatbot]
     )
@@ -228,4 +369,9 @@ with gr.Blocks() as demo:
     )
 
 if __name__ == "__main__":
+
+    #load the dummies builder pickle file
+    with open("models/dummies_builder.pkl", "rb") as f:
+            loaded_builder = pickle.load(f)
+
     demo.launch(show_error=True)
