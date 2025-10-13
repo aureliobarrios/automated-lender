@@ -27,7 +27,7 @@ with gr.Blocks() as demo:
     # ----- Agentic Functions -----
     @tool
     def loan_application(loan_amount: float, loan_term: float, interest_rate: float, loan_installment:float, annual_income: float, debt_to_income_ratio: float, earliest_credit_line: float, open_credit_accounts: float, derogatory_record: bool, 
-                    revolving_balance: float, revolving_utilization: float, total_accounts: float, mortgage_account: bool, past_bankruptcy: bool, loan_grade: str, owernship_status: str, verification_status: str) -> str:
+                    revolving_balance: float, revolving_utilization: float, total_accounts: float, mortgage_account: bool, past_bankruptcy: bool, loan_grade: str, ownership_status: str, verification_status: str) -> str:
         "Function that takes in feature inputs about and individual to input to a trained Machine Learning model. The Machine Learning model then predicts if the user will or will not be accepted for the loan application."
 
         #save all numeric features for new entry
@@ -50,7 +50,7 @@ with gr.Blocks() as demo:
         #save all the categorical features for the new entry
         data_entry_categorical = {
             "sub_grade": [loan_grade],
-            "home_ownership": owernship_status,
+            "home_ownership": ownership_status,
             "verification_status": verification_status
         }
         #build dataframe from numeric entries
@@ -161,63 +161,62 @@ with gr.Blocks() as demo:
     # ----- Components -----
     
     with gr.Row():
-        with gr.Column(scale=1):
 
-            #update numeric features for machine learning model
-
-            loan_amount = gr.Number(label="Loan Amount", minimum=500, maximum=40000.0, value=1000, interactive=True)
-
-            loan_term = gr.Radio(["36 Months", "60 Months"], value="36 Months", label="Users Loan Term", interactive=True)
-
-            interest_rate = gr.Slider(5, 31, step=0.1, value=12.5, label="Loan Interest Rate", interactive=True)
-
-            income = gr.Number(label="Users Annual Income", minimum=4000, maximum=250000.0, value=50000, interactive=True)
-
-            dti = gr.Slider(0, 50, step=0.1, value=12.5, label="Users Debt To Income Ratio", interactive=True)
-
-            earliest_credit_line = gr.Dropdown(list(range(1944, 2014)), value=2000, multiselect=False, label="Users Earliest Credit Line", interactive=True)
-            
-            open_accounts = gr.Number(label="Number of Open Accounts", minimum=1, maximum=40, value=1, interactive=True, precision=0)
-
+        with gr.Column():
             with gr.Row():
-
-                pub_rec = gr.Radio(["Yes", "No"], value="No", label="Does The User Have Any Derogatory Public Records?", interactive=True)
+                pub_rec = gr.Radio(["Yes", "No"], value="No", label="Does User Have A Derogatory Record?", interactive=True)
 
                 mort_acc = gr.Radio(["Yes", "No"], value="Yes", label="Does The User Have A Mortgage Account?", interactive=True)
 
                 bankruptcies = gr.Radio(["Yes", "No"], value="No", label="Does The User Have Any Bankruptcies", interactive=True)
 
-            revol_bal = gr.Number(label="User Total Credit Revolving Balance", minimum=0, maximum=250000, value=1500, interactive=True)
-
-            revol_util = gr.Slider(0, 100, step=0.1, value=20, label="Revolving Utilization Rate", interactive=True)
-
-            total_acc = gr.Number(label="Total Credit Accounts", minimum=1, maximum=80, value=1, interactive=True, precision=0)
-
-            #update categorical features for machine learning model
-
-            #built grade letters
-            letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
-            #save a list of possible grades for the loan
-            possible_grades = []
-            #build out the full list
-            for curr_letter in letters:
-                for i in range(1, 6):
-                    #save current iteration of possible grade
-                    possible_grades.append(curr_letter + str(i))
-
-            loan_grade = gr.Dropdown(possible_grades, value="A1", multiselect=False, label="Loan Grade", interactive=True)
-
-            home_ownership = gr.Radio(["Own", "Mortgage", "Rent", "Other"], value="Rent", label="Home Ownership Status", interactive=True)
-
-            verification = gr.Radio(["Verified", "Source Verified", "Not Verified"], value="Verified", label="Verification Status", interactive=True)
-
+        with gr.Column():
             with gr.Row():
-                apply_button = gr.Button("Apply", interactive=True)
+                home_ownership = gr.Radio(["Own", "Mortgage", "Rent", "Other"], value="Rent", label="Home Ownership Status", interactive=True)
+
+                verification = gr.Radio(["Verified", "Source Verified", "Not Verified"], value="Verified", label="Verification Status", interactive=True)
+
+    with gr.Row():
+        #built grade letters
+        letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+        #save a list of possible grades for the loan
+        possible_grades = []
+        #build out the full list
+        for curr_letter in letters:
+            for i in range(1, 6):
+                #save current iteration of possible grade
+                possible_grades.append(curr_letter + str(i))
+
+        loan_grade = gr.Dropdown(possible_grades, value="B4", multiselect=False, label="Loan Grade", interactive=True)
+
+        earliest_credit_line = gr.Dropdown(list(range(1944, 2014)), value=2000, multiselect=False, label="Users Earliest Credit Line", interactive=True)
+
+        open_accounts = gr.Number(label="Number of Open Accounts", minimum=1, maximum=40, value=1, interactive=True, precision=0)
+
+        total_acc = gr.Number(label="Total Credit Accounts", minimum=1, maximum=80, value=1, interactive=True, precision=0)
+
+    with gr.Row():
+        with gr.Column(scale=1):
+            loan_amount = gr.Number(label="Loan Amount", minimum=500, maximum=40000.0, value=25000, interactive=True)
+
+            loan_term = gr.Radio(["36 Months", "60 Months"], value="36 Months", label="Users Loan Term", interactive=True)
+
+            interest_rate = gr.Slider(5, 31, step=0.1, value=14.5, label="Loan Interest Rate", interactive=True)
+
+            income = gr.Number(label="Users Annual Income", minimum=4000, maximum=250000.0, value=50000, interactive=True)
+
+            dti = gr.Slider(0, 50, step=0.1, value=25.5, label="Users Debt To Income Ratio", interactive=True)
+
+            revol_bal = gr.Number(label="User Total Credit Revolving Balance", minimum=0, maximum=250000, value=20000, interactive=True)
+
+            revol_util = gr.Slider(0, 100, step=0.1, value=30, label="Revolving Utilization Rate", interactive=True)
+
+            apply_button = gr.Button("Apply", interactive=True)
 
         with gr.Column(scale=3):
-            chatbot = gr.Chatbot(type="messages")
+            chatbot = gr.Chatbot(type="messages", height=460)
             
-            msg = gr.Textbox()
+            msg = gr.Textbox(scale=0)
 
             with gr.Row():
                 msg_clear = gr.Button("Clear", interactive=True)
@@ -266,7 +265,7 @@ with gr.Blocks() as demo:
             "mortgage_account": mort_acc == "Yes",
             "past_bankruptcy": bankruptcies == "Yes",
             "loan_grade": loan_grade,
-            "owernship_status": home_ownership.upper(),
+            "ownership_status": home_ownership.upper(),
             "verification_status": verification,
         }
         #run the data on the pre-trained machine learning model
@@ -292,9 +291,44 @@ with gr.Blocks() as demo:
             "messages": [HumanMessage(content=agent_message)]
         }, config)
         #add response to the chatbot interface
-        chatbot.append({"role": "assistant", "content": beautify_output(response) + "\n\n---- Machine Learning Model Result ----\n" + application_result})
+        chatbot.append({"role": "assistant", "content": beautify_output(response) + "\n\n---- Machine Learning Model Result ----\n" + application_result + "\n-----------"})
         return chatbot
     
+    #build out the interpretation step for the AI agent
+    def interpretation_step(chatbot):
+        #build out the SHAP values
+        shap_values = {
+            "Interest Rate": "+0.49",
+            "Loan Term": "+0.15",
+            "Revolving Utilization": "+0.22",
+            "Annual Income": "+0.17",
+            "Monthly Installment": "+0.15",
+            "Mortgage Account": "+0.27",
+            "Earliest Credit Line": "+0.04",
+            "Debt To Income Ratio": "+0.15",
+            "Previous Bankruptcies": "+0.01",
+            "Derogatory Public Records": "+0.03"
+        }
+        #build the prompt
+        agent_message = f"""Based on what you know about the users credit profile and the prediction response from the machine learning model, use your knowledge of the SHAP values of the
+        machine learning model to give a summary of what features from the user made the most impact on the prediction. Make sure to reference the SHAP values in your model interpretation. Please meet
+        the following requirements:
+        - Mention what feature made the most impact on the prediction and how changes in this feature would impact the prediction.
+        - Mention how features impact each other.
+        - Provide a summary of the user based on your knowledge of the features meeting these requirements: your overall recommendation if a loan should be given, what features about the user give you sense that they will or will not pay the loan back.
+
+        SHAP Values for each feature: {shap_values}
+
+        Keep in mind that the Machine Learning model is classifying if a user based on their features will Fully Pay Off their loan (Class: 1) or Default on their loan (Class: 0).
+        """
+        #call the agent for a response
+        response = agent.invoke({
+            "messages": [HumanMessage(content=agent_message)]
+        }, config)
+        #add response to the chatbot interface
+        chatbot.append({"role": "assistant", "content": beautify_output(response)})
+        return chatbot
+
     #chat with the chatbot
     def bot(chatbot):
         #get the content of the user message
@@ -343,6 +377,8 @@ with gr.Blocks() as demo:
         check_input, [loan_amount, income, open_accounts, revol_bal, total_acc, chatbot], [loan_amount, income, open_accounts, revol_bal, total_acc, chatbot]
     ).success(
         loan_request, [loan_amount, loan_term, interest_rate, income, dti, earliest_credit_line, open_accounts, pub_rec, mort_acc, bankruptcies, revol_bal, revol_util, total_acc, loan_grade, home_ownership, verification, chatbot], chatbot
+    ).then(
+        interpretation_step, chatbot, chatbot
     )
 
     #handle user clicks apply failure
