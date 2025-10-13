@@ -14,6 +14,11 @@ from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from langchain_core.tools import tool
 from langchain_community.tools.tavily_search import TavilySearchResults
 
+from langchain_unstructured import UnstructuredLoader
+from langchain_openai import OpenAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.vectorstores import InMemoryVectorStore
+
 load_dotenv()
 
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
@@ -114,14 +119,45 @@ with gr.Blocks() as demo:
         except Exception as e:
             return None
         
+    @tool
+    def shap_context(query: str) -> list:
+        "Function that gives the AI agent context about SHAP, the agent should call this tool when talking about anything related to SHAP."
+
+        print("Ran Shap Context")
+
+        #gather file paths for augmented data
+        file_paths = ["./text/shap.txt"]
+        #build a loader object to load those files
+        loader = UnstructuredLoader(file_paths)
+        #load in the files into documents to be accessed
+        docs = loader.load()
+        #split the text into chunks
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=250,  # The maximum size of a chunk (in characters)
+            chunk_overlap=50   # The number of characters to overlap between chunks
+        )
+        #get the chunks of the text
+        chunks = text_splitter.split_documents(docs)
+        #get the open ai embeddings
+        embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+        #create a vector store
+        vector_store = InMemoryVectorStore(embeddings)
+        #add documents into our vector store
+        document_ids = vector_store.add_documents(documents=chunks)
+        #retreive chunks related to the query
+        retrieved_chunks = vector_store.similarity_search(query, k=5)
+        return retrieved_chunks
+        
     #create our openai model
     model = init_chat_model(model="gpt-4.1-mini", model_provider="openai")
     #create the tools for our ReAct agent
-    tools = [loan_application, search_web]
+    tools = [loan_application, search_web, shap_context]
     #build the ReAct agent
     agent = create_react_agent(model=model, tools=tools, checkpointer=MemorySaver())
     #create the config for memory saving
     config = {"configurable": {"thread_id": "lesson_3_thread"}}
+
+    
 
     
     # ----- Helper Functions -----
@@ -313,6 +349,7 @@ with gr.Blocks() as demo:
         agent_message = f"""Based on what you know about the users credit profile and the prediction response from the machine learning model, use your knowledge of the SHAP values of the
         machine learning model to give a summary of what features from the user made the most impact on the prediction. Make sure to reference the SHAP values in your model interpretation. Please meet
         the following requirements:
+        - You must use the SHAP context tool to get a better understanding of SHAP
         - Mention what feature made the most impact on the prediction and how changes in this feature would impact the prediction.
         - Mention how features impact each other.
         - Provide a summary of the user based on your knowledge of the features meeting these requirements: your overall recommendation if a loan should be given, what features about the user give you sense that they will or will not pay the loan back.
@@ -353,7 +390,6 @@ with gr.Blocks() as demo:
         return loan_amount, income, open_accounts, revol_bal, total_acc, chatbot
     
     def reset_form(income, loan_amount, chatbot):
-        print("ran reset")
         income = gr.Number(label="Income", info="Your annual income", minimum=0, maximum=10000000, value=50000, interactive=True)
 
         loan_amount = gr.Number(label="Amount", info="The requested loan amount", minimum=100, maximum=40000000, value=5000, interactive=True)
