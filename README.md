@@ -32,3 +32,7 @@ The system is built with modular AI and ML components that integrate through **L
 - **Model Explainability:** Uses SHAP values to help users understand why a loan was approved or denied.  
 - **Financial Context Awareness:** RAG pipeline enriches explanations with relevant financial knowledge.  
 - **Interactive Deployment:** Hosted on Hugging Face for real-time user interaction. 
+
+## SHAP Feature Summary
+
+![image](/images/xgboost_shap_summary.png)
